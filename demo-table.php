@@ -376,7 +376,7 @@
 
 	            if (response.ok) {
 	            	const result = await response.json();
-	            	console.log(result);
+	            	
 	            	processLogout(result.data);
 	            }
 	        }
@@ -386,7 +386,7 @@
 	                fetch(`https://accounts.google.com/o/oauth2/revoke?token=${token}`, {
 			            mode: 'no-cors' // Important for revocation
 			        }).then(() => {
-			            console.log('Token revoked');
+			            // console.log('Token revoked');
 			            logoutFallback();
 			        }).catch(error => {
 			            console.log('Revocation error:', error);
@@ -560,7 +560,7 @@
 				}
 
 				// pyramid
-				generatePrecisePyramid(objects, targets);
+				generateTetrahedronSurface(objects, targets);
 
 				//
 
@@ -616,85 +616,201 @@
 
 			}
 
-			// Pyramid
-			// Alternative: Pyramid with mathematical precision for straight surfaces
-			function generatePrecisePyramid(objects, targets) {
+			// Generate Pyramid (Tetrahedron) shape positions
+			function generateTetrahedronSurface(objects, targets) {
 			    targets.pyramid = [];
 			    const vector = new THREE.Vector3();
 			    
-			    let index = 0;
-			    const baseSpacing = 160;
-			    const heightStep = 200; // Larger height for steeper sides
+			    // Create basic pyramid geometry (detail=0)
+			    // The calculation for radius is to calculate the proper radius for the shape dynamically based on the total records available
+			    const radius = (objects.length * 10) / 1.5;
+			    const geometry = new THREE.TetrahedronGeometry(radius, 0);
 			    
-			    // Top point
-			    if (index < objects.length) {
-			        const object = new THREE.Object3D();
-			        object.position.set(0, 0, 0);
-			        vector.set(0, 100, 0);
-			        object.lookAt(vector);
-			        targets.pyramid.push(object);
-			        index++;
+			    // Get vertices - with detail=0, we have exactly 4 vertices
+			    const positions = geometry.attributes.position.array;
+			    
+			    // Define the 4 vertices manually (for detail=0 pyramid)
+			    const vertices = [];
+			    for (let i = 0; i < 4; i++) {
+			        vertices.push(new THREE.Vector3(
+			            positions[i * 3],
+			            positions[i * 3 + 1],
+			            positions[i * 3 + 2]
+			        ));
 			    }
 			    
-			    // Create pyramid with precise 45-degree slopes
-			    let level = 1;
-			    while (index < objects.length) {
-			        const sideLength = level * 2; // Number of positions per side
-			        const yPos = -level * heightStep;
-			        const radius = level * baseSpacing;
+			    // Manually define the 4 faces (triangles) of a pyramid
+			    // Each face is defined by 3 vertices
+			    const faces = [
+			        { v1: vertices[0], v2: vertices[1], v3: vertices[2] }, // Face 0
+			        { v1: vertices[0], v2: vertices[2], v3: vertices[3] }, // Face 1
+			        { v1: vertices[0], v2: vertices[3], v3: vertices[1] }, // Face 2
+			        { v1: vertices[1], v2: vertices[3], v3: vertices[2] }  // Face 3 (base)
+			    ];
+			    
+			    // Calculate normals for each face
+			    faces.forEach(face => {
+			        const normal = new THREE.Vector3()
+			            .crossVectors(
+			                new THREE.Vector3().subVectors(face.v2, face.v1),
+			                new THREE.Vector3().subVectors(face.v3, face.v1)
+			            )
+			            .normalize();
+			        face.normal = normal;
 			        
-			        // Generate positions in perfect grid pattern
-			        for (let side = 0; side < 4 && index < objects.length; side++) {
-			            for (let pos = 0; pos < sideLength && index < objects.length; pos++) {
+			        // Calculate center of face
+			        face.center = new THREE.Vector3()
+			            .add(face.v1)
+			            .add(face.v2)
+			            .add(face.v3)
+			            .divideScalar(3);
+			    });
+			    
+			    let objectIndex = 0;
+			    const totalObjects = objects.length;
+			    
+			    // Phase 1: Place objects on face interiors (avoid edges)
+			    
+			    // Calculate how many objects per face (distribute proportionally by area)
+			    // For regular pyramid, all faces have equal area
+			    const objectsPerFaceBase = Math.floor(totalObjects / 4);
+			    const extraObjects = totalObjects % 4;
+			    
+			    for (let faceIdx = 0; faceIdx < 4 && objectIndex < totalObjects; faceIdx++) {
+			        const face = faces[faceIdx];
+			        const objectsForThisFace = objectsPerFaceBase + (faceIdx < extraObjects ? 1 : 0);
+			        
+			        if (objectsForThisFace <= 0) continue;
+			        
+			        // Create triangular grid inside this face
+			        const gridSize = Math.max(2, Math.ceil(Math.sqrt(objectsForThisFace * 2)));
+			        
+			        for (let i = 1; i < gridSize && objectIndex < totalObjects; i++) {
+			            for (let j = 1; j < gridSize - i && objectIndex < totalObjects; j++) {
+			                // Barycentric coordinates (avoid edges where i=0, j=0, or i+j=gridSize)
+			                const u = i / gridSize;
+			                const v = j / gridSize;
+			                
+			                // Position inside triangle
+			                const position = face.v1.clone()
+			                    .add(face.v2.clone().sub(face.v1).multiplyScalar(u))
+			                    .add(face.v3.clone().sub(face.v1).multiplyScalar(v));
+			                
 			                const object = new THREE.Object3D();
+			                object.position.copy(position);
 			                
-			                let x, z;
-			                // Perfect straight line calculations
-			                switch(side) {
-			                    case 0: // Top edge - perfectly straight line
-			                        x = (pos - level) * baseSpacing + baseSpacing/2;
-			                        z = -radius;
-			                        break;
-			                    case 1: // Right edge
-			                        x = radius;
-			                        z = (pos - level) * baseSpacing + baseSpacing/2;
-			                        break;
-			                    case 2: // Bottom edge
-			                        x = (level - pos) * baseSpacing - baseSpacing/2;
-			                        z = radius;
-			                        break;
-			                    case 3: // Left edge
-			                        x = -radius;
-			                        z = (level - pos) * baseSpacing - baseSpacing/2;
-			                        break;
-			                }
-			                
-			                object.position.set(x, yPos, z);
-			                
-			                // Calculate surface normal for straight facing
-			                let normalX = 0, normalZ = 0;
-			                if (Math.abs(x) === radius) normalX = Math.sign(x);
-			                if (Math.abs(z) === radius) normalZ = Math.sign(z);
-			                
-			                // For sharper appearance, reduce vertical tilt
-			                vector.set(
-			                    x + normalX * 500,
-			                    yPos + 50, // Small upward tilt for visibility
-			                    z + normalZ * 500
-			                );
-			                
+			                // Face outward along face normal
+			                vector.copy(position).add(face.normal.clone().multiplyScalar(100));
 			                object.lookAt(vector);
+			                
 			                targets.pyramid.push(object);
-			                index++;
+			                objectIndex++;
 			            }
 			        }
+			    }
+			    
+			    // Phase 2: If we have fewer objects than grid positions, we're done
+			    // If we need more objects, add them along edges
+			    if (objectIndex < totalObjects) {
 			        
-			        level++;
+			        // Define the 6 edges of the pyramid
+			        const edges = [
+			            { start: vertices[0], end: vertices[1], faces: [faces[0], faces[2]] },
+			            { start: vertices[0], end: vertices[2], faces: [faces[0], faces[1]] },
+			            { start: vertices[0], end: vertices[3], faces: [faces[1], faces[2]] },
+			            { start: vertices[1], end: vertices[2], faces: [faces[0], faces[3]] },
+			            { start: vertices[1], end: vertices[3], faces: [faces[2], faces[3]] },
+			            { start: vertices[2], end: vertices[3], faces: [faces[1], faces[3]] }
+			        ];
+			        
+			        // Calculate remaining objects per edge
+			        const remainingObjects = totalObjects - objectIndex;
+			        const objectsPerEdge = Math.max(1, Math.floor(remainingObjects / 6));
+			        
+			        for (const edge of edges) {
+			            if (objectIndex >= totalObjects) break;
+			            
+			            const edgeVector = new THREE.Vector3().subVectors(edge.end, edge.start);
+			            const edgeLength = edgeVector.length();
+			            
+			            // Place objects along this edge
+			            for (let i = 1; i <= objectsPerEdge && objectIndex < totalObjects; i++) {
+			                const t = i / (objectsPerEdge + 1); // Avoid vertices
+			                const position = new THREE.Vector3().lerpVectors(edge.start, edge.end, t);
+			                
+			                const object = new THREE.Object3D();
+			                object.position.copy(position);
+			                
+			                // Calculate normal by averaging the two face normals
+			                const avgNormal = new THREE.Vector3()
+			                    .add(edge.faces[0].normal)
+			                    .add(edge.faces[1].normal)
+			                    .normalize();
+			                
+			                vector.copy(position).add(avgNormal.multiplyScalar(100));
+			                object.lookAt(vector);
+			                
+			                targets.pyramid.push(object);
+			                objectIndex++;
+			            }
+			        }
+			    }
+			    
+			    // Phase 3: Add vertices if still need objects
+			    if (objectIndex < totalObjects) {
+			        for (const vertex of vertices) {
+			            if (objectIndex >= totalObjects) break;
+			            
+			            // Check if vertex already has an object nearby
+			            const hasNearbyObject = targets.pyramid.some(obj => 
+			                obj.position.distanceTo(vertex) < 50
+			            );
+			            
+			            if (!hasNearbyObject) {
+			                const object = new THREE.Object3D();
+			                object.position.copy(vertex);
+			                
+			                // Face outward from center
+			                vector.copy(vertex).multiplyScalar(2);
+			                object.lookAt(vector);
+			                
+			                targets.pyramid.push(object);
+			                objectIndex++;
+			            }
+			        }
+			    }
+			    
+			    // Phase 4: Random points on faces for any remaining objects
+			    if (objectIndex < totalObjects) {
+			        while (objectIndex < totalObjects) {
+			            // Pick random face
+			            const face = faces[Math.floor(Math.random() * 4)];
+			            
+			            // Random barycentric coordinates
+			            let r1 = Math.random();
+			            let r2 = Math.random();
+			            if (r1 + r2 > 1) {
+			                r1 = 1 - r1;
+			                r2 = 1 - r2;
+			            }
+			            
+			            const position = face.v1.clone()
+			                .add(face.v2.clone().sub(face.v1).multiplyScalar(r1))
+			                .add(face.v3.clone().sub(face.v1).multiplyScalar(r2));
+			            
+			            const object = new THREE.Object3D();
+			            object.position.copy(position);
+			            
+			            vector.copy(position).add(face.normal.clone().multiplyScalar(100));
+			            object.lookAt(vector);
+			            
+			            targets.pyramid.push(object);
+			            objectIndex++;
+			        }
 			    }
 			}
 
 			function transform( targets, duration ) {
-
 				TWEEN.removeAll();
 
 				for ( let i = 0; i < objects.length; i ++ ) {
@@ -702,15 +818,17 @@
 					const object = objects[ i ];
 					const target = targets[ i ];
 
-					new TWEEN.Tween( object.position )
+					if (object && target) {
+						new TWEEN.Tween( object.position )
 						.to( { x: target.position.x, y: target.position.y, z: target.position.z }, Math.random() * duration + duration )
 						.easing( TWEEN.Easing.Exponential.InOut )
 						.start();
 
-					new TWEEN.Tween( object.rotation )
-						.to( { x: target.rotation.x, y: target.rotation.y, z: target.rotation.z }, Math.random() * duration + duration )
-						.easing( TWEEN.Easing.Exponential.InOut )
-						.start();
+						new TWEEN.Tween( object.rotation )
+							.to( { x: target.rotation.x, y: target.rotation.y, z: target.rotation.z }, Math.random() * duration + duration )
+							.easing( TWEEN.Easing.Exponential.InOut )
+							.start();
+					}
 
 				}
 
