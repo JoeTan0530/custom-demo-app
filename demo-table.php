@@ -560,8 +560,7 @@
 				}
 
 				// pyramid
-				targets.pyramid = generatePyramidPositions(objects, targets);
-				// generateUniformPyramid(objects, targets);
+				generatePrecisePyramid(objects, targets);
 
 				//
 
@@ -617,128 +616,80 @@
 
 			}
 
-			function generatePyramidPositions(objects, targets) {
-			    const pyramid = [];
+			// Pyramid
+			// Alternative: Pyramid with mathematical precision for straight surfaces
+			function generatePrecisePyramid(objects, targets) {
+			    targets.pyramid = [];
 			    const vector = new THREE.Vector3();
 			    
-			    // Calculate base size based on number of objects
-			    // For a pyramid, total objects = 1 + 2 + 3 + ... + n
-			    // We need to find n where n(n+1)/2 >= objects.length
-			    let baseSize = 1;
-			    while (baseSize * (baseSize + 1) / 2 < objects.length) {
-			        baseSize++;
+			    let index = 0;
+			    const baseSpacing = 160;
+			    const heightStep = 200; // Larger height for steeper sides
+			    
+			    // Top point
+			    if (index < objects.length) {
+			        const object = new THREE.Object3D();
+			        object.position.set(0, 0, 0);
+			        vector.set(0, 100, 0);
+			        object.lookAt(vector);
+			        targets.pyramid.push(object);
+			        index++;
 			    }
 			    
-			    let objectIndex = 0;
-			    const spacing = 200; // Distance between objects
-			    const heightSpacing = 250; // Vertical spacing between layers
-			    
-			    // Create pyramid layers from bottom to top
-			    for (let layer = 0; layer < baseSize && objectIndex < objects.length; layer++) {
-			        const currentLayerSize = baseSize - layer;
-			        const startX = -(currentLayerSize - 1) * spacing / 2;
-			        const startZ = -(currentLayerSize - 1) * spacing / 2;
-			        const yPos = layer * heightSpacing;
-
-			        console.log("Layer " + layer);
+			    // Create pyramid with precise 45-degree slopes
+			    let level = 1;
+			    while (index < objects.length) {
+			        const sideLength = level * 2; // Number of positions per side
+			        const yPos = -level * heightStep;
+			        const radius = level * baseSpacing;
 			        
-			        // Create objects in current layer
-			        for (let x = 0; x < currentLayerSize && objectIndex < objects.length; x++) {
-			            for (let z = 0; z < currentLayerSize && objectIndex < objects.length; z++) {
+			        // Generate positions in perfect grid pattern
+			        for (let side = 0; side < 4 && index < objects.length; side++) {
+			            for (let pos = 0; pos < sideLength && index < objects.length; pos++) {
 			                const object = new THREE.Object3D();
 			                
-			                // Calculate position
-			                object.position.x = startX + x * spacing;
-			                object.position.y = yPos;
-			                object.position.z = startZ + z * spacing;
+			                let x, z;
+			                // Perfect straight line calculations
+			                switch(side) {
+			                    case 0: // Top edge - perfectly straight line
+			                        x = (pos - level) * baseSpacing + baseSpacing/2;
+			                        z = -radius;
+			                        break;
+			                    case 1: // Right edge
+			                        x = radius;
+			                        z = (pos - level) * baseSpacing + baseSpacing/2;
+			                        break;
+			                    case 2: // Bottom edge
+			                        x = (level - pos) * baseSpacing - baseSpacing/2;
+			                        z = radius;
+			                        break;
+			                    case 3: // Left edge
+			                        x = -radius;
+			                        z = (level - pos) * baseSpacing - baseSpacing/2;
+			                        break;
+			                }
 			                
-			                // Make objects face outward from pyramid center
-			                vector.set(0, yPos, 0); // Point toward the vertical axis
+			                object.position.set(x, yPos, z);
+			                
+			                // Calculate surface normal for straight facing
+			                let normalX = 0, normalZ = 0;
+			                if (Math.abs(x) === radius) normalX = Math.sign(x);
+			                if (Math.abs(z) === radius) normalZ = Math.sign(z);
+			                
+			                // For sharper appearance, reduce vertical tilt
+			                vector.set(
+			                    x + normalX * 500,
+			                    yPos + 50, // Small upward tilt for visibility
+			                    z + normalZ * 500
+			                );
+			                
 			                object.lookAt(vector);
-			                
-			                pyramid.push(object);
-			                objectIndex++;
-
-			                console.log("Object z: " + z);
-			            }
-			            console.log("Object x: " + x);
-			        }
-			    }
-			    
-			    return pyramid;
-			}
-
-			// Alternative version if you want to integrate directly in your loop style:
-			function generatePyramidDirect(objects, targets) {
-			    targets.pyramid = [];
-			    const vector = new THREE.Vector3();
-			    
-			    let objectIndex = 0;
-			    const totalObjects = objects.length;
-			    const spacing = 2000;
-			    const heightSpacing = 2500;
-			    
-			    // Find optimal base size for pyramid
-			    let baseSize = Math.ceil((Math.sqrt(1 + 8 * totalObjects) - 1) / 2);
-			    
-			    for (let layer = 0; layer < baseSize && objectIndex < totalObjects; layer++) {
-			        const layerSize = baseSize - layer;
-			        const halfWidth = (layerSize - 1) * spacing * 0.5;
-			        const yPos = layer * heightSpacing;
-			        
-			        for (let i = 0; i < layerSize * layerSize && objectIndex < totalObjects; i++) {
-			            const x = i % layerSize;
-			            const z = Math.floor(i / layerSize);
-			            
-			            const object = new THREE.Object3D();
-			            object.position.x = x * spacing - halfWidth;
-			            object.position.y = yPos;
-			            object.position.z = z * spacing - halfWidth;
-			            
-			            // Optional: Make objects face outward from center
-			            // vector.set(0, yPos, 0);
-			            // object.lookAt(vector);
-			            
-			            targets.pyramid.push(object);
-			            objectIndex++;
-			        }
-			    }
-			}
-
-			// For a more uniform pyramid (each layer has decreasing size by 1)
-			function generateUniformPyramid(objects, targets) {
-			    targets.pyramid = [];
-			    const vector = new THREE.Vector3();
-			    
-			    let objectIndex = 0;
-			    const spacing = 1800;
-			    const heightSpacing = 2200;
-			    let layer = 0;
-			    
-			    while (objectIndex < objects.length) {
-			        const layerSize = Math.floor(objects.length / 5) - layer + 1;
-			        if (layerSize <= 0) break;
-			        
-			        const halfWidth = (layerSize - 1) * spacing * 0.5;
-			        const yPos = layer * heightSpacing;
-			        
-			        for (let x = 0; x < layerSize && objectIndex < objects.length; x++) {
-			            for (let z = 0; z < layerSize && objectIndex < objects.length; z++) {
-			                const object = new THREE.Object3D();
-			                
-			                object.position.x = x * spacing - halfWidth;
-			                object.position.y = yPos;
-			                object.position.z = z * spacing - halfWidth;
-			                
-			                // Face outward (optional)
-			                // const angle = Math.atan2(object.position.x, object.position.z);
-			                // object.rotation.y = angle;
-			                
 			                targets.pyramid.push(object);
-			                objectIndex++;
+			                index++;
 			            }
 			        }
-			        layer++;
+			        
+			        level++;
 			    }
 			}
 
